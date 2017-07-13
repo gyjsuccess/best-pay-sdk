@@ -12,16 +12,17 @@
 
 #### 邮件内容(发送至lly835@163.com)
 标题: 支付账号借用
+
 内容:
-1. 付款截图
+1. 付款截图(付款码见下方)
 2. openid
 3. 你的外网地址，推荐使用[内网穿透](https://natapp.cn/)
+4. 慕课网用户提供课程订单
 
-####请求示意图
+#### 请求示意图
 
 ```sequence
-支付授权目录 -> 你的外网: 转发
-你的外网-> 你的电脑: 转发
+支付授权目录 -> 你的外网 -> 你的电脑
 ```
 
 支付授权目录
@@ -32,6 +33,11 @@ http://xxx.s1.natapp.cc
 
 你的电脑
 http://127.0.0.1:8080/pay?openid=xxxxxxxxxx
+
+#### 付款码
+![29](https://github.com/Pay-Group/best-pay-sdk/blob/master/doc/29.jpg)
+
+![49](https://github.com/Pay-Group/best-pay-sdk/blob/master/doc/49.jpg)
 
 
 
