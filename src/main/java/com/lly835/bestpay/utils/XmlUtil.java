@@ -9,6 +9,7 @@ import com.thoughtworks.xstream.io.xml.XppDriver;
 import org.simpleframework.xml.Serializer;
 import org.simpleframework.xml.core.Persister;
 
+import java.io.ByteArrayOutputStream;
 import java.io.Writer;
 
 /**
@@ -58,9 +59,17 @@ public class XmlUtil {
      * @return
      */
     public static String toXMl(Object obj) {
-        //使用注解设置别名必须在使用之前加上注解类才有作用
-        xStream.processAnnotations(obj.getClass());
-        return xStream.toXML(obj);
+        try {
+            Serializer serializer = new Persister();
+            ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+
+            serializer.write(obj, byteArrayOutputStream);
+            return new String(byteArrayOutputStream.toByteArray());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return null;
     }
 
     public static Object fromXML(String xml, Class objClass) {

@@ -1,5 +1,6 @@
 package com.lly835.bestpay.service.impl;
 
+import com.lly835.bestpay.config.RetrofitConfig;
 import com.lly835.bestpay.config.SignType;
 import com.lly835.bestpay.config.WxPayH5Config;
 import com.lly835.bestpay.constants.WxPayConstants;
@@ -21,6 +22,8 @@ import lombok.extern.slf4j.Slf4j;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.RequestBody;
+import org.apache.commons.lang3.StringUtils;
+import org.simpleframework.xml.Element;
 import retrofit2.Call;
 import retrofit2.Response;
 import retrofit2.Retrofit;
@@ -28,6 +31,7 @@ import retrofit2.converter.simplexml.SimpleXmlConverterFactory;
 
 import javax.servlet.http.HttpServletRequest;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -46,27 +50,10 @@ public class WxPayServiceImpl implements BestPayService {
 
     @Override
     public PayResponse pay(PayRequest request) {
-        WxPayUnifiedorderRequest wxRequest = new WxPayUnifiedorderRequest();
-        wxRequest.setOutTradeNo(request.getOrderId());
-        wxRequest.setTotalFee(MoneyUtil.Yuan2Fen(request.getOrderAmount()));
-        wxRequest.setBody(request.getOrderName());
-        wxRequest.setOpenid(request.getOpenid());
-
-        wxRequest.setTradeType("JSAPI");
-        wxRequest.setAppid(wxPayH5Config.getAppId());
-        wxRequest.setMchId(wxPayH5Config.getMchId());
-        wxRequest.setNotifyUrl(wxPayH5Config.getNotifyUrl());
-        wxRequest.setNonceStr(RandomUtil.getRandomStr());
-        wxRequest.setSpbillCreateIp("8.8.8.8");
-        wxRequest.setSign(WxPaySignature.sign(buildMap(wxRequest), wxPayH5Config.getMchKey()));
-
-        Retrofit retrofit = new Retrofit.Builder()
-                .baseUrl(WxPayConstants.WXPAY_GATEWAY)
-                .addConverterFactory(SimpleXmlConverterFactory.create())
-                .build();
-        String xml = XmlUtil.toXMl(wxRequest);
+        String xml = XmlUtil.toXMl(buildWxPayUnifiedorderRequest(request));
         RequestBody body = RequestBody.create(MediaType.parse("application/xml; charset=utf-8"),xml);
-        Call<WxPaySyncResponse> call = retrofit.create(WxPayApi.class).unifiedorder(body);
+
+        Call<WxPaySyncResponse> call = RetrofitConfig.build(WxPayConstants.WXPAY_GATEWAY).create(WxPayApi.class).unifiedorder(body);
         Response<WxPaySyncResponse> retrofitResponse  = null;
         try{
             retrofitResponse = call.execute();
@@ -146,7 +133,7 @@ public class WxPayServiceImpl implements BestPayService {
         wxRequest.setAppid(wxPayH5Config.getAppId());
         wxRequest.setMchId(wxPayH5Config.getMchId());
         wxRequest.setNonceStr(RandomUtil.getRandomStr());
-        wxRequest.setSign(WxPaySignature.sign(buildMap(wxRequest), wxPayH5Config.getMchKey()));
+//        wxRequest.setSign(WxPaySignature.sign(buildMap(wxRequest), wxPayH5Config.getMchKey()));
 
         //初始化证书
         if (wxPayH5Config.getSslContext() == null) {
@@ -256,22 +243,54 @@ public class WxPayServiceImpl implements BestPayService {
      * @param request
      * @return
      */
-    private Map<String, String> buildMap(WxPayUnifiedorderRequest request) {
-        Map<String, String> map = new HashMap<>();
-        map.put("appid", request.getAppid());
-        map.put("mch_id", request.getMchId());
-        map.put("nonce_str", request.getNonceStr());
-        map.put("sign", request.getSign());
-        map.put("attach", request.getAttach());
-        map.put("body", request.getBody());
-        map.put("detail", request.getDetail());
-        map.put("notify_url", request.getNotifyUrl());
-        map.put("openid", request.getOpenid());
-        map.put("out_trade_no", request.getOutTradeNo());
-        map.put("spbill_create_ip", request.getSpbillCreateIp());
-        map.put("total_fee", String.valueOf(request.getTotalFee()));
-        map.put("trade_type", request.getTradeType());
+    private <T>Map<String, Object> buildMap(T request) {
+        Map<String, Object> map = new HashMap<>();
+        //利用反射, 获取属性名和属性值
+        Class requestClass = request.getClass();
+        for (Field field : requestClass.getDeclaredFields()) {
+            field.setAccessible(true);
+            Object obj = null;
+            try {
+                obj = field.get(request);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+            //属性上是否有注解
+            if (field.isAnnotationPresent(Element.class)) {
+                //获取注解
+                Element element = field.getAnnotation(Element.class);
+                //如果name值为空, 则使用属性值
+                if (StringUtils.isBlank(element.name())) {
+                    map.put(field.getName(), obj);
+                }else {
+                    map.put(element.name(), obj);
+                }
+            }
+        }
         return map;
+    }
+
+    /**
+     * 构造同意下单对象
+     * @param request
+     * @return
+     */
+    private WxPayUnifiedorderRequest buildWxPayUnifiedorderRequest(PayRequest request) {
+        WxPayUnifiedorderRequest wxRequest = new WxPayUnifiedorderRequest();
+        wxRequest.setOutTradeNo(request.getOrderId());
+        wxRequest.setTotalFee(MoneyUtil.Yuan2Fen(request.getOrderAmount()));
+        wxRequest.setBody(request.getOrderName());
+        wxRequest.setOpenid(request.getOpenid());
+
+        wxRequest.setTradeType("JSAPI");
+        wxRequest.setAppid(wxPayH5Config.getAppId());
+        wxRequest.setMchId(wxPayH5Config.getMchId());
+        wxRequest.setNotifyUrl(wxPayH5Config.getNotifyUrl());
+        wxRequest.setNonceStr(RandomUtil.getRandomStr());
+        wxRequest.setSpbillCreateIp("8.8.8.8");
+        wxRequest.setSign(WxPaySignature.sign(buildMap(wxRequest), wxPayH5Config.getMchKey()));
+        return wxRequest;
     }
 
     /**
@@ -299,7 +318,7 @@ public class WxPayServiceImpl implements BestPayService {
         payResponse.setNonceStr(nonceStr);
         payResponse.setPackAge(packAge);
         payResponse.setSignType(signType);
-        payResponse.setPaySign(WxPaySignature.sign(map, wxPayH5Config.getMchKey()));
+//        payResponse.setPaySign(WxPaySignature.sign(map, wxPayH5Config.getMchKey()));
 
         return payResponse;
     }
